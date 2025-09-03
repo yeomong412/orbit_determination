@@ -4,6 +4,7 @@ from constants import *                                         # 상수값
 from coordinate_transform import coordinate_transform_ecliptic  # 적도좌표계 -> 황도좌표계 변환
 from getcoordinate_earth import getcoordinate_earth             # NASA JPL Horizons에서 지구의 위치좌표 얻어오기 
 from lambert_solver import solve_lambert                        # 램버트 문제의 해를 구함
+asteriod_name = '2000AC6'
 
 # ----------------------------------------------------------------------------------------
 # 기준 평면은 지구 공전면이고, 황도 좌표계를 이용함.
@@ -71,18 +72,62 @@ for i in range(Num_observation - 1):
         h = np.cross(r_vec, v_vec)  # 각운동량 벡터
         N = np.cross([0, 0, 1], h)  # 승교점 벡터
 
-        orbital_elements[i+j][0] = -mu / (2 * epsilon)  # 장반경
-        orbital_elements[i+j][1] = np.linalg.norm(np.cross(v_vec, h) / mu - r_vec / r)  # 이심률
-        orbital_elements[i+j][2] = np.arccos(np.dot(h, [0, 0, 1]) / np.linalg.norm(h))  # 궤도 경사각
-        orbital_elements[i+j][3] = np.arccos(np.dot(N, [1, 0, 0]) / np.linalg.norm(N))  # 승교점 경도
-        orbital_elements[i+j][4] = np.arccos(np.dot(N, np.cross(v_vec, h) / mu - r_vec / r) / (np.linalg.norm(N) * orbital_elements[i][1]))  # 근일점 편각
+        # orbital_elements[i+j][0] = -mu / (2 * epsilon)  # 장반경
+        # orbital_elements[i+j][1] = np.linalg.norm(np.cross(v_vec, h) / mu - r_vec / r)  # 이심률
+        # orbital_elements[i+j][2] = np.arccos(np.dot(h, [0, 0, 1]) / np.linalg.norm(h))  # 궤도 경사각
+        # orbital_elements[i+j][3] = np.arccos(np.dot(N, [1, 0, 0]) / np.linalg.norm(N))  # 승교점 경도
+        # orbital_elements[i+j][4] = np.arccos(np.dot(N, np.cross(v_vec, h) / mu - r_vec / r) / (np.linalg.norm(N) * orbital_elements[i][1]))  # 근일점 편각
 
-        # ------------------------ 천체 위치 정보 계산--------------------------------
-        theta = np.arccos(np.dot(N, r_vec) / (np.linalg.norm(N) * r))
-        if np.dot(r_vec, v_vec) < 0:
-            theta = 2 * np.pi - theta
-        orbital_elements[i+j][5] = theta  # 진근점 이각
-        orbital_elements[i+j][6] = float(time[i+j])  # 시간
+        # # ------------------------ 천체 위치 정보 계산--------------------------------
+        # theta = np.arccos(np.dot(N, r_vec) / (np.linalg.norm(N) * r))
+        # if np.dot(r_vec, v_vec) < 0:
+        #     theta = 2 * np.pi - theta
+        # orbital_elements[i+j][5] = theta  # 진근점 이각
+        # orbital_elements[i+j][6] = float(time[i+j])  # 시간 #이전 코드
+
+        # --- 공통 벡터 ---
+        e_vec = np.cross(v_vec, h) / mu - r_vec / r
+        e = np.linalg.norm(e_vec)
+
+        # 1) 장반경 a, 이심률 e, 궤도경사 i
+        orbital_elements[i+j][0] = -mu / (2 * epsilon)
+        orbital_elements[i+j][1] = e
+        orbital_elements[i+j][2] = np.arccos(h[2] / np.linalg.norm(h))
+
+        # 2) 노드벡터 N 및 RAAN Ω (atan2)
+        N = np.cross([0.0, 0.0, 1.0], h)
+        N_norm = np.linalg.norm(N)
+        if N_norm < 1e-12:
+            Omega = 0.0  # 적도궤도 특이치
+        else:
+            Omega = np.mod(np.arctan2(N[1], N[0]), 2*np.pi)
+        orbital_elements[i+j][3] = Omega
+
+        # 3) 근일점 편각 ω (atan2, 사분면 안전)
+        h_norm = np.linalg.norm(h)
+        if e < 1e-12 or N_norm < 1e-12:
+            omega = 0.0  # 원궤도/적도궤도 특이치
+        else:
+            cos_w = np.dot(N, e_vec) / (N_norm * e)
+            sin_w = np.dot(np.cross(N, e_vec), h) / (N_norm * e * h_norm)
+            omega = np.mod(np.arctan2(sin_w, cos_w), 2*np.pi)
+        orbital_elements[i+j][4] = omega
+
+        # 4) 진근점이각 ν (atan2, 사분면 안전)
+        if e < 1e-12:
+            # 원궤도: ν 대신 u를 사용(참고용)
+            cos_u = np.dot(N, r_vec) / (max(N_norm,1e-12) * r)
+            sin_u = np.dot(np.cross(N, r_vec), h) / (max(N_norm,1e-12) * r * h_norm)
+            nu = np.mod(np.arctan2(sin_u, cos_u), 2*np.pi)
+        else:
+            cos_nu = np.dot(e_vec, r_vec) / (e * r)
+            sin_nu = np.dot(np.cross(e_vec, r_vec), h) / (e * r * h_norm)
+            nu = np.mod(np.arctan2(sin_nu, cos_nu), 2*np.pi)
+        orbital_elements[i+j][5] = nu
+
+        # 5) 시간
+        orbital_elements[i+j][6] = float(time[i+j])
+
 
         # 계산된 궤도 요소 출력
         print(
@@ -101,8 +146,8 @@ print('--------------------------')
 # 3. 장반경 단위: au, 궤도 요소 각도: deg
 # ---------------------------------------------------------
 oe_km_rad = np.mean(orbital_elements, axis=0)
-oe_km_deg = [oe_km_rad[0], oe_km_rad[1]] + list(map(np.rad2deg, oe_km_rad[2:]))
-oe_au_deg = [oe_km_deg[0] / au_to_km, oe_km_deg[1]] + list(map(np.rad2deg, oe_km_rad[2:]))
+oe_km_deg = [oe_km_rad[0], oe_km_rad[1]] + list(map(np.rad2deg, oe_km_rad[2:6])) + [oe_km_rad[6]]
+oe_au_deg = [oe_km_deg[0] / au_to_km, oe_km_deg[1]] + list(map(np.rad2deg, oe_km_rad[2:6])) + [oe_km_rad[6]]
 
 print("궤도요소의 최종 평균값:")
 print(
@@ -117,6 +162,9 @@ print(
     f"==== 장반경(au,deg): {oe_au_deg[0]} au, 이심률: {oe_au_deg[1]}, "
     f"궤도경사: {oe_au_deg[2]} deg, 승교점경도: {oe_au_deg[3]} deg, 근일점편각: {oe_au_deg[4]} deg"
 )
+el_input = open('data\el_input.txt','w')
+el_input.write(f"{oe_au_deg[0]} {oe_au_deg[1]} {oe_au_deg[2]} {oe_au_deg[3]} {oe_au_deg[4]} {oe_au_deg[5]} {oe_au_deg[6]} {asteriod_name}")
+
 
 print('-------------종료-------------')
 
