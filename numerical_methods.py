@@ -30,16 +30,31 @@ def stumpff_S_diff(z):
 def lambert_y(z,r1,r2,A):
     return float(np.linalg.norm(r1) + np.linalg.norm(r2) + A * (z * stumpff_S(z) - 1) / np.sqrt(stumpff_C(z)))
 
-def lambert_y_diff(z,A):
-    return float((A / 4) * np.sqrt(stumpff_C(z)))
+def lambert_y_diff(z, r1, r2, A):
+    C = stumpff_C(z)
+    S = stumpff_S(z)
+    Cp = stumpff_C_diff(z)
+    Sp = stumpff_S_diff(z)
+    sqrtC = np.sqrt(C)
+    f = z * S - 1.0
+    numerator = (S + z * Sp) * sqrtC - f * 0.5 * (Cp / sqrtC)
+    return float(A * numerator / C)
 
 def lambert_F(z,r1,r2,A,delta_t):
     return np.float64(np.power(float( lambert_y(z,r1,r2,A) / stumpff_C(z) ), 1.5) * stumpff_S(z) + A * np.sqrt(lambert_y(z,r1,r2,A)) - np.sqrt(mu) * delta_t)
 
 def lambert_F_diff(z,r1,r2,A):
-    return (3/2) * np.power((lambert_y(z,r1,r2,A) / stumpff_C(z)), 0.5) * ((lambert_y_diff(z,A) * stumpff_C(z) - stumpff_C_diff(z) * lambert_y(z,r1,r2,A)) / np.power(stumpff_C(z), 2)) * stumpff_S(z) \
-            + np.power((lambert_y(z,r1,r2,A) / stumpff_C(z)) , 1.5) * stumpff_S_diff(z) \
-            + (1/2) * A * ((lambert_y_diff(z,A)) / (np.sqrt(lambert_y(z,r1,r2,A))))
+    y = lambert_y(z, r1, r2, A)
+    C = stumpff_C(z)
+    S = stumpff_S(z)
+    Cp = stumpff_C_diff(z)
+    Sp = stumpff_S_diff(z)
+    ydz = lambert_y_diff(z, r1, r2, A)
+
+    term1 = (3/2) * np.power((y / C), 0.5) * ((ydz * C - Cp * y) / (C**2)) * S
+    term2 = np.power((y / C), 1.5) * Sp
+    term3 = 0.5 * A * (ydz / np.sqrt(y))
+    return term1 + term2 + term3
 
 def lagrange_f(z, r1, r2, A):
     return 1 - (lambert_y(z,r1,r2,A) / np.linalg.norm(r1))
