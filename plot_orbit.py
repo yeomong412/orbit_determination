@@ -209,5 +209,5 @@ def plot_from_file(filename, JD_ref=None, plot_earth=True, show_markers=True):
 
 # -------- Usage --------
 # el_input.txt: a e i raan argp nu JD_obs  (공백/콤마 구분, 단위: AU, deg, JD)
-JD_ref = 2451558.0          # None이면 각 라인의 JD_obs에서의 nu로 표시
+JD_ref =2460992.95986111        # None이면 각 라인의 JD_obs에서의 nu로 표시
 plot_from_file('data\\el_input.txt', JD_ref=JD_ref, plot_earth=True, show_markers=True)

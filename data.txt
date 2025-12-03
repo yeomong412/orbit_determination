@@ -1,0 +1,7 @@
+permID |provID     |trkSub  |mode|stn |obsTime                |ra         |dec        |rmsRA|rmsDec|astCat  |mag  |rmsMag|band|fltr|photCat |photAp|logSNR|seeing|exp |rmsFit|nStars|notes|remarks
+     12|           |        | CCD|XXX |2018-11-17T14:05:07Z   | 59.13765  |+19.61094  |0.11 |0.12  |   Gaia3| 9.5 |0.08  |  Gr|    |   Gaia3| 1.7  |2.02  |1.0   |  30|0.16  |    23|     |
+     12|           |        | CCD|XXX |2018-11-17T14:16:57Z   | 59.13534  |+19.61019  |0.15 |0.20  |   Gaia3| 9.5 |0.13  |  Gr|    |   Gaia3| 1.7  |1.99  |0.9   |  30|0.25  |    18|     |
+     12|           |        | CCD|XXX |2018-11-17T14:19:29Z   | 59.13491  |+19.60991  |0.14 |0.15  |   Gaia3| 9.5 |0.12  |  Gr|    |   Gaia3| 1.7  |1.97  |1.0   |  30|0.20  |    18|     |
+     12|           |        | CCD|XXX |2018-11-17T14:21:49Z   | 59.13439  |+19.60973  |0.11 |0.15  |   Gaia3| 9.5 |0.07  |  Gr|    |   Gaia3| 1.7  |1.92  |0.9   |  30|0.19  |    20|     |
+NYSC
+

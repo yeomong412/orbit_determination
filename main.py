@@ -5,7 +5,7 @@ from constants import *                                         # 상수값
 from coordinate_transform import coordinate_transform_ecliptic  # 적도좌표계 -> 황도좌표계 변환
 from getcoordinate_earth import getcoordinate_earth             # NASA JPL Horizons에서 지구의 위치좌표 얻어오기 
 from lambert_solver import solve_lambert                        # 램버트 문제의 해를 구함
-asteriod_name = '2000AC6'
+asteriod_name = 'Eros(433)'  #소행성 이름 설정
 
 # ----------------------------------------------------------------------------------------
 # 기준 평면은 지구 공전면이고, 황도 좌표계를 이용함.

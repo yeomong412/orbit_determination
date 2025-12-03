@@ -1,0 +1,279 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import numpy as np
+
+# ----- 상수 (WGS84) -----
+a = 6378.1370  # km
+b = 6356.7523  # km
+e2 = 1 - (b*b)/(a*a)
+
+# ----- 계산 로직 -----
+def ecef(lat_deg, lon_deg, h=0.0):
+    lat = np.deg2rad(lat_deg)
+    lon = np.deg2rad(lon_deg)
+    N = a / np.sqrt(1 - e2*np.sin(lat)**2)
+    x = (N + h) * np.cos(lat) * np.cos(lon)
+    y = (N + h) * np.cos(lat) * np.sin(lon)
+    z = ((1 - e2) * N + h) * np.sin(lat)
+    return np.array([x, y, z])
+
+def chord_distance(pos1, pos2, h1=0.0, h2=0.0):
+    r1 = ecef(pos1[0], pos1[1], h1)
+    r2 = ecef(pos2[0], pos2[1], h2)
+    return float(np.linalg.norm(r1 - r2))
+
+def dms_to_deg_triplet(d_str, m_str, s_str):
+    d = float(d_str)
+    m = float(m_str)
+    s = float(s_str)
+    sign = -1 if d < 0 else 1
+    return sign * (abs(d) + m/60.0 + s/3600.0)
+
+def calc_gp(RA_arcsec, DEC_arcsec, b1_deg, b2_deg):
+    RA = np.deg2rad(RA_arcsec/3600.0)
+    DEC = np.deg2rad(DEC_arcsec/3600.0)
+    denom = np.cos(np.deg2rad((b1_deg + b2_deg)/2.0 - DEC_arcsec/3600.0))
+    val = np.sqrt(RA**2 + DEC**2) / denom
+    return 3600.0 * np.rad2deg(val)
+
+def distance_from_parallax(baseline_km, gp_arcsec):
+    d_km = (baseline_km / gp_arcsec) * 206265.0
+    d_AU = d_km / 1.5e8
+    return d_km, d_AU
+
+# ----- GUI -----
+class ParallaxApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("지구 타원체 기선 & 시차 거리 계산기")
+        self.geometry("720x640")
+        self.resizable(False, False)
+
+        self.mode = tk.StringVar(value="decimal")  # 'decimal' or 'dms'
+
+        self._build_mode_frame()
+        self._build_position_frames()
+        self._build_parallax_frame()
+        self._build_actions_frame()
+        self._build_output_frame()
+
+    def _build_mode_frame(self):
+        f = ttk.LabelFrame(self, text="입력 형식")
+        f.pack(fill="x", padx=12, pady=8)
+
+        ttk.Radiobutton(f, text="십진법 (deg)", value="decimal", variable=self.mode, command=self._toggle_mode).grid(row=0, column=0, padx=8, pady=6, sticky="w")
+        ttk.Radiobutton(f, text="육십분법 (D M S)", value="dms", variable=self.mode, command=self._toggle_mode).grid(row=0, column=1, padx=8, pady=6, sticky="w")
+
+    def _build_position_frames(self):
+        self.pos1_frame = ttk.LabelFrame(self, text="1번 위치")
+        self.pos1_frame.pack(fill="x", padx=12, pady=6)
+
+        self.pos2_frame = ttk.LabelFrame(self, text="2번 위치")
+        self.pos2_frame.pack(fill="x", padx=12, pady=6)
+
+        # --- Decimal widgets ---
+        # pos1
+        self.p1_lat_dec = ttk.Entry(self.pos1_frame, width=12)
+        self.p1_lon_dec = ttk.Entry(self.pos1_frame, width=12)
+        self.p1_h = ttk.Entry(self.pos1_frame, width=10)
+        # pos2
+        self.p2_lat_dec = ttk.Entry(self.pos2_frame, width=12)
+        self.p2_lon_dec = ttk.Entry(self.pos2_frame, width=12)
+        self.p2_h = ttk.Entry(self.pos2_frame, width=10)
+
+        # --- DMS widgets ---
+        # pos1
+        self.p1_lat_d = ttk.Entry(self.pos1_frame, width=6)
+        self.p1_lat_m = ttk.Entry(self.pos1_frame, width=4)
+        self.p1_lat_s = ttk.Entry(self.pos1_frame, width=6)
+
+        self.p1_lon_d = ttk.Entry(self.pos1_frame, width=6)
+        self.p1_lon_m = ttk.Entry(self.pos1_frame, width=4)
+        self.p1_lon_s = ttk.Entry(self.pos1_frame, width=6)
+
+        # pos2
+        self.p2_lat_d = ttk.Entry(self.pos2_frame, width=6)
+        self.p2_lat_m = ttk.Entry(self.pos2_frame, width=4)
+        self.p2_lat_s = ttk.Entry(self.pos2_frame, width=6)
+
+        self.p2_lon_d = ttk.Entry(self.pos2_frame, width=6)
+        self.p2_lon_m = ttk.Entry(self.pos2_frame, width=4)
+        self.p2_lon_s = ttk.Entry(self.pos2_frame, width=6)
+
+        # Layout builders
+        self._layout_pos_frames()
+
+    def _layout_pos_frames(self):
+        # Clear any existing children grid (for mode toggling)
+        for w in self.pos1_frame.grid_slaves(): w.grid_forget()
+        for w in self.pos2_frame.grid_slaves(): w.grid_forget()
+
+        if self.mode.get() == "decimal":
+            # POS1 (decimal)
+            ttk.Label(self.pos1_frame, text="위도 (deg):").grid(row=0, column=0, padx=6, pady=4, sticky="e")
+            self.p1_lat_dec.grid(row=0, column=1, padx=6, pady=4, sticky="w")
+            ttk.Label(self.pos1_frame, text="경도 (deg):").grid(row=0, column=2, padx=6, pady=4, sticky="e")
+            self.p1_lon_dec.grid(row=0, column=3, padx=6, pady=4, sticky="w")
+            ttk.Label(self.pos1_frame, text="고도 h (km, 옵션):").grid(row=0, column=4, padx=6, pady=4, sticky="e")
+            self.p1_h.grid(row=0, column=5, padx=6, pady=4, sticky="w")
+
+            # POS2 (decimal)
+            ttk.Label(self.pos2_frame, text="위도 (deg):").grid(row=0, column=0, padx=6, pady=4, sticky="e")
+            self.p2_lat_dec.grid(row=0, column=1, padx=6, pady=4, sticky="w")
+            ttk.Label(self.pos2_frame, text="경도 (deg):").grid(row=0, column=2, padx=6, pady=4, sticky="e")
+            self.p2_lon_dec.grid(row=0, column=3, padx=6, pady=4, sticky="w")
+            ttk.Label(self.pos2_frame, text="고도 h (km, 옵션):").grid(row=0, column=4, padx=6, pady=4, sticky="e")
+            self.p2_h.grid(row=0, column=5, padx=6, pady=4, sticky="w")
+
+        else:
+            # POS1 (DMS)
+            ttk.Label(self.pos1_frame, text="위도 D M S:").grid(row=0, column=0, padx=6, pady=4, sticky="e")
+            self.p1_lat_d.grid(row=0, column=1, padx=2, pady=4)
+            self.p1_lat_m.grid(row=0, column=2, padx=2, pady=4)
+            self.p1_lat_s.grid(row=0, column=3, padx=2, pady=4)
+
+            ttk.Label(self.pos1_frame, text="경도 D M S:").grid(row=0, column=4, padx=6, pady=4, sticky="e")
+            self.p1_lon_d.grid(row=0, column=5, padx=2, pady=4)
+            self.p1_lon_m.grid(row=0, column=6, padx=2, pady=4)
+            self.p1_lon_s.grid(row=0, column=7, padx=2, pady=4)
+
+            ttk.Label(self.pos1_frame, text="고도 h (km, 옵션):").grid(row=0, column=8, padx=6, pady=4, sticky="e")
+            self.p1_h.grid(row=0, column=9, padx=6, pady=4, sticky="w")
+
+            # POS2 (DMS)
+            ttk.Label(self.pos2_frame, text="위도 D M S:").grid(row=0, column=0, padx=6, pady=4, sticky="e")
+            self.p2_lat_d.grid(row=0, column=1, padx=2, pady=4)
+            self.p2_lat_m.grid(row=0, column=2, padx=2, pady=4)
+            self.p2_lat_s.grid(row=0, column=3, padx=2, pady=4)
+
+            ttk.Label(self.pos2_frame, text="경도 D M S:").grid(row=0, column=4, padx=6, pady=4, sticky="e")
+            self.p2_lon_d.grid(row=0, column=5, padx=2, pady=4)
+            self.p2_lon_m.grid(row=0, column=6, padx=2, pady=4)
+            self.p2_lon_s.grid(row=0, column=7, padx=2, pady=4)
+
+            ttk.Label(self.pos2_frame, text="고도 h (km, 옵션):").grid(row=0, column=8, padx=6, pady=4, sticky="e")
+            self.p2_h.grid(row=0, column=9, padx=6, pady=4, sticky="w")
+
+    def _build_parallax_frame(self):
+        f = ttk.LabelFrame(self, text="시차 입력 및 계산")
+        f.pack(fill="x", padx=12, pady=6)
+
+        ttk.Label(f, text="RA 차이 (sec):").grid(row=0, column=0, padx=6, pady=6, sticky="e")
+        ttk.Label(f, text="DEC 차이 (\"):").grid(row=0, column=2, padx=6, pady=6, sticky="e")
+
+        self.ra_arcsec = ttk.Entry(f, width=12)
+        self.dec_arcsec = ttk.Entry(f, width=12)
+        self.ra_arcsec.grid(row=0, column=1, padx=6, pady=6)
+        self.dec_arcsec.grid(row=0, column=3, padx=6, pady=6)
+
+        self.baseline_label = ttk.Label(f, text="기선거리: - km")
+        self.baseline_label.grid(row=1, column=0, columnspan=2, padx=6, pady=6, sticky="w")
+
+        self.gp_label = ttk.Label(f, text="환산 시차 gp: - arcsec")
+        self.gp_label.grid(row=1, column=2, columnspan=2, padx=6, pady=6, sticky="w")
+
+    def _build_actions_frame(self):
+        f = ttk.Frame(self)
+        f.pack(fill="x", padx=12, pady=6)
+
+        self.btn_baseline = ttk.Button(f, text="기선거리 계산", command=self.compute_baseline)
+        self.btn_all = ttk.Button(f, text="gp 및 거리 계산", command=self.compute_all)
+        self.btn_clear = ttk.Button(f, text="초기화", command=self.clear_all)
+
+        self.btn_baseline.pack(side="left", padx=6, pady=6)
+        self.btn_all.pack(side="left", padx=6, pady=6)
+        self.btn_clear.pack(side="right", padx=6, pady=6)
+
+    def _build_output_frame(self):
+        f = ttk.LabelFrame(self, text="결과")
+        f.pack(fill="both", expand=True, padx=12, pady=8)
+
+        self.out_text = tk.Text(f, height=12, wrap="word")
+        self.out_text.pack(fill="both", expand=True, padx=6, pady=6)
+
+    def _toggle_mode(self):
+        self._layout_pos_frames()
+
+    def _get_positions(self):
+        try:
+            if self.mode.get() == "decimal":
+                lat1 = float(self.p1_lat_dec.get())
+                lon1 = float(self.p1_lon_dec.get())
+                lat2 = float(self.p2_lat_dec.get())
+                lon2 = float(self.p2_lon_dec.get())
+            else:
+                lat1 = dms_to_deg_triplet(self.p1_lat_d.get(), self.p1_lat_m.get(), self.p1_lat_s.get())
+                lon1 = dms_to_deg_triplet(self.p1_lon_d.get(), self.p1_lon_m.get(), self.p1_lon_s.get())
+                lat2 = dms_to_deg_triplet(self.p2_lat_d.get(), self.p2_lat_m.get(), self.p2_lat_s.get())
+                lon2 = dms_to_deg_triplet(self.p2_lon_d.get(), self.p2_lon_m.get(), self.p2_lon_s.get())
+
+            h1 = float(self.p1_h.get()) if self.p1_h.get().strip() else 0.0
+            h2 = float(self.p2_h.get()) if self.p2_h.get().strip() else 0.0
+        except ValueError:
+            raise ValueError("위치(또는 고도) 입력값을 확인하세요.")
+
+        return (lat1, lon1, h1), (lat2, lon2, h2)
+
+    def compute_baseline(self):
+        try:
+            (lat1, lon1, h1), (lat2, lon2, h2) = self._get_positions()
+            base = chord_distance([lat1, lon1], [lat2, lon2], h1, h2)
+            self.baseline_label.config(text=f"기선거리: {base:.2f} km")
+            self._append_output(f"두 지점 사이의 기선거리: {base:.2f} km\n")
+        except Exception as e:
+            messagebox.showerror("오류", str(e))
+
+    def compute_all(self):
+        try:
+            (lat1, lon1, h1), (lat2, lon2, h2) = self._get_positions()
+
+            # Baseline
+            base = chord_distance([lat1, lon1], [lat2, lon2], h1, h2)
+            self.baseline_label.config(text=f"기선거리: {base:.2f} km")
+
+            # Parallax inputs
+            ra_val = float(self.ra_arcsec.get())
+            dec_val = float(self.dec_arcsec.get())
+
+            gp = calc_gp(ra_val, dec_val, lat1, lat2)
+            self.gp_label.config(text=f"환산 시차 gp: {gp:.6f} arcsec")
+
+            d_km, d_au = distance_from_parallax(base, gp)
+
+            # Output
+            self._append_output(
+                "===== 계산 결과 =====\n"
+                f"위치1: lat={lat1:.6f} deg, lon={lon1:.6f} deg, h={h1:.3f} km\n"
+                f"위치2: lat={lat2:.6f} deg, lon={lon2:.6f} deg, h={h2:.3f} km\n"
+                f"기선거리: {base:.2f} km\n"
+                f"입력: RA Δ={ra_val:.6f} arcsec, DEC Δ={dec_val:.6f} arcsec\n"
+                f"환산 시차 gp = {gp:.6f} arcsec\n"
+                f"소행성까지의 거리: {d_km:.2f} km ({d_au:.6f} AU)\n\n"
+            )
+        except ZeroDivisionError:
+            messagebox.showerror("오류", "cos(...)가 0에 가까워 gp 계산에서 분모가 0이 됩니다. 위도/DEC 입력을 확인하세요.")
+        except ValueError:
+            messagebox.showerror("오류", "숫자 입력을 확인하세요. RA/DEC 차이와 좌표를 다시 입력해 주세요.")
+        except Exception as e:
+            messagebox.showerror("오류", str(e))
+
+    def clear_all(self):
+        for e in [self.p1_lat_dec, self.p1_lon_dec, self.p2_lat_dec, self.p2_lon_dec,
+                  self.p1_lat_d, self.p1_lat_m, self.p1_lat_s, self.p1_lon_d, self.p1_lon_m, self.p1_lon_s,
+                  self.p2_lat_d, self.p2_lat_m, self.p2_lat_s, self.p2_lon_d, self.p2_lon_m, self.p2_lon_s,
+                  self.p1_h, self.p2_h, self.ra_arcsec, self.dec_arcsec]:
+            try:
+                e.delete(0, tk.END)
+            except:
+                pass
+        self.baseline_label.config(text="기선거리: - km")
+        self.gp_label.config(text="환산 시차 gp: - arcsec")
+        self.out_text.delete("1.0", tk.END)
+
+    def _append_output(self, s):
+        self.out_text.insert(tk.END, s)
+        self.out_text.see(tk.END)
+
+if __name__ == "__main__":
+    app = ParallaxApp()
+    app.mainloop()
